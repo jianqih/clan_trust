@@ -57,7 +57,13 @@ reg_df_fam <- left_join(ind_df_fil_2,famecon14_mat,by="fid14")
 reg_df_fam_clean <- reg_df_fam%>%
   dplyr::filter(fincome1>=0)%>%
   dplyr::filter(houseasset_gross>=0)%>%
-  dplyr::filter(fml2014num>=0)
+  dplyr::filter(fml2014num>=0)%>%
+  dplyr::filter(marry>0)%>%
+  mutate(marriage=case_when(
+    marry>=2~1,
+    marry==1~0
+  ))
+  
 # 村庄控制变量： 常住人口、少数民族集聚、村人均收入对数、到县城距离
 reg_df_vill <- reg_df_fam_clean%>%
   mutate(minority=case_when(
@@ -70,7 +76,7 @@ reg_df_vill <- reg_df_fam_clean%>%
   rename(dis_country=cg2)%>%
   rename(residual_vill=cb202)%>%
   rename(income_per_vill=ch6)%>%
-  select(ins_trust,clan,cfps2014_age,cfps_minzu,p_income,edu,cfps_gender,cfps_party,marry,fml2014num,fincome1,residual_vill,income_per_vill,dis_country,minority,transfer,qn10021,qn10022,qn10023,qn10024,qn10026,qn701,qg1)
+  select(ins_trust,clan,cfps2014_age,cfps_minzu,p_income,edu,cfps_gender,cfps_party,marry,fml2014num,fincome1,residual_vill,income_per_vill,dis_country,minority,transfer,qa301,provcd14.x)
 
 reg_wocontrol <- lm(data = ind_df_fil_1,formula = ins_trust~clan)
 reg_ind <- lm(data = ind_df_fil_2,formula = ins_trust~clan+cfps2014_age+cfps_minzu+log(p_income)+edu+cfps_gender+cfps_party+marry)
@@ -81,39 +87,125 @@ covar_label <-  c("宗族祠堂", "年龄","是否为少数民族", "个人对�
 stargazer::stargazer(reg_wocontrol,reg_ind,reg_fam,reg_cou,
                      type = "latex",
                      out = "tex/tab_tex/benchmark.tex",
+                     dep.var.caption="被解释变量：制度信任",
+                     dep.var.labels.include = FALSE,
                      title = "宗族文化与制度信任回归结果",
                      column.sep.width="0pt",
-                     dep.var.labels="官员信任水平",
                      covariate.labels =covar_label,
                      no.space=TRUE,
-                     omit.stat=c("LL","ser","f"),
+                     keep.stat = "n",
+                     omit = "Constant",
                      label = "regression1")
 
+library(plm)
+reg_wocontrol_fix <- ind_df_fil_1%>%
+  dplyr::filter(provcd14.x>=10)%>%
+  lm(formula = ins_trust~clan+factor(provcd14.x)-1)
+reg_ind_fix <- ind_df_fil_2%>%
+  dplyr::filter(provcd14.x>=10)%>%
+  lm(formula = ins_trust~clan+cfps2014_age+cfps_minzu+log(p_income)+edu+cfps_gender+cfps_party+marry+factor(provcd14.x)-1)
+reg_fam_fix <- reg_df_fam_clean %>%
+  dplyr::filter(provcd14.x>=10)%>%
+  lm(formula = ins_trust~clan+cfps2014_age+cfps_minzu+log(p_income)+edu+cfps_gender+cfps_party+marry+fml2014num+log(fincome1)+factor(provcd14.x)-1)
+reg_cou_fix <- reg_df_vill%>%
+  dplyr::filter(provcd14.x>=10)%>%
+  dplyr::filter(clan>0)%>%
+  lm(formula = ins_trust~clan+cfps2014_age+cfps_minzu+log(p_income)+edu+cfps_gender+cfps_party+marry+fml2014num+log(fincome1)+minority+dis_country+log(income_per_vill)+residual_vill+factor(provcd14.x)-1)
 
-
+stargazer::stargazer(reg_wocontrol_fix,reg_ind_fix,reg_fam_fix,reg_cou_fix,
+                     type = "latex",
+                     out = "tex/tab_tex/benchmark_fix.tex",
+                     dep.var.caption="被解释变量：制度信任",
+                     dep.var.labels.include = FALSE,
+                     title = "宗族文化与制度信任固定效应回归",
+                     column.sep.width="0pt",
+                     covariate.labels =covar_label,
+                     no.space=TRUE,
+                     omit = "provcd14.x",
+                     add.lines=list(c('省级固定效应', '是','是','是','是')),
+                     keep.stat = "n",
+                     label = "regression_fix")
 # 异质分析
+## 户籍
+
+reg_intract <- reg_df_vill%>%
+  dplyr::filter(qa301>=0)%>%
+  dplyr::filter(qa301<=10)%>%
+  mutate(hukou=case_when(
+    qa301==1~0,
+    qa301==3~1
+  ))%>%
+  lm(formula = ins_trust~clan*hukou+cfps2014_age*hukou+cfps_minzu*hukou+log(p_income)*hukou+edu*hukou+cfps_gender*hukou+cfps_party*hukou+marry*hukou+fml2014num*hukou+log(fincome1)*hukou+minority*hukou+dis_country*hukou+log(income_per_vill)*hukou+residual_vill*hukou)
+library(strucchange)
+anova(reg_agri,reg_nonagri)
+
+
+reg_agri <- reg_df_vill%>%
+  dplyr::filter(qa301==1)%>%
+  lm(formula = ins_trust~clan+cfps2014_age+cfps_minzu+log(p_income)+edu+cfps_gender+cfps_party+marry+fml2014num+log(fincome1)+minority+dis_country+log(income_per_vill)+residual_vill)
+
+reg_nonagri <- reg_df_vill%>%
+  dplyr::filter(qa301==3)%>%
+  lm(formula = ins_trust~clan+cfps2014_age+cfps_minzu+log(p_income)+edu+cfps_gender+cfps_party+marry+fml2014num+log(fincome1)+minority+dis_country+log(income_per_vill)+residual_vill)
+
+stargazer::stargazer(reg_agri, reg_nonagri,
+                     type="latex",keep = c("clan"),
+                     dep.var.caption="被解释变量：制度信任",
+                     dep.var.labels.include = FALSE,
+                     column.labels = c("农业户口","非农户口"),
+                     column.sep.width="0pt",
+                     no.space=TRUE,
+                     covariate.labels = c("家族祠堂"),
+                     omit.stat=c("LL","ser","f"),
+                     title="农业户口与非农户口回归", single.row=TRUE,
+                      label = "hetero_hukou",
+                     out = "tex/tab_tex/hetero_hukou.tex")
 
 
 
+
+#summary(reg_nonagri)
+## plot
 df <- ind_df_fil_1[,c("clan","ins_trust")]
 df%>%
   group_by(clan)%>%
   summarise(trust_mean=mean(ins_trust))->df_mean
-ggplot(data = ind_df_fil_1)+
-  geom_density(aes(clan))
-ggplot(data = ind_df_fil_1)+
-  geom_density(aes(ins_trust))+theme_bw()+xlab("制度信任")+ylab("密度分布")
+ggplot(data = df_mean,aes(clan,trust_mean))+
+  geom_point()+geom_smooth(method = "lm")+xlab("家族祠堂")+ylab("制度信任均值")
 
-
-ind_df_fil_1%>%
-  dplyr::filter(clan>0)%>%
-ggplot()+
-  geom_boxplot(aes(clan,ins_trust))
-
-
-
-ggplot(data = ind_df_fil_1)+
-  geom_density(aes(ins_trust))
 
 
 # robust
+
+
+
+reg_wocontrol_fix_trun <- ind_df_fil_1%>%
+  dplyr::filter(provcd14.x>=10)%>%
+  dplyr::filter(clan>0)%>%
+  lm(formula = ins_trust~clan+factor(provcd14.x)-1)
+reg_ind_fix_trun <- ind_df_fil_2%>%
+  dplyr::filter(provcd14.x>=10)%>%
+  dplyr::filter(clan>0)%>%
+  lm(formula = ins_trust~clan+cfps2014_age+cfps_minzu+log(p_income)+edu+cfps_gender+cfps_party+marriage+factor(provcd14.x)-1)
+reg_fam_fix_trun <- reg_df_fam_clean %>%
+  dplyr::filter(provcd14.x>=10)%>%
+  dplyr::filter(clan>0)%>%
+  lm(formula = ins_trust~clan+cfps2014_age+cfps_minzu+log(p_income)+edu+cfps_gender+cfps_party+marriage+fml2014num+log(fincome1)+factor(provcd14.x)-1)
+reg_cou_fix_trun <- reg_df_vill%>%
+  dplyr::filter(provcd14.x>=10)%>%
+  dplyr::filter(clan>0)%>%
+  lm(formula = ins_trust~clan+cfps2014_age+cfps_minzu+log(p_income)+edu+cfps_gender+cfps_party+marriage+fml2014num+log(fincome1)+minority+dis_country+log(income_per_vill)+residual_vill+factor(provcd14.x)-1)
+
+stargazer::stargazer(reg_wocontrol_fix,reg_ind_fix,reg_fam_fix,reg_cou_fix,
+                     type = "latex",
+                     out = "tex/tab_tex/benchmark_fix_trun.tex",
+                     dep.var.caption="被解释变量：制度信任",
+                     dep.var.labels.include = FALSE,
+                     title = "宗族文化与制度信任回归（子样本）",
+                     column.sep.width="0pt",
+                     covariate.labels =covar_label,
+                     no.space=TRUE,
+                     omit = "provcd14.x",
+                     add.lines=list(c('省级固定效应', '是','是','是','是')),
+                     keep.stat = "n",
+                     label = "regression_fix_trun")

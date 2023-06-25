@@ -75,25 +75,10 @@ stargazer::stargazer(reg_wocontrol,reg_ind,reg_fam,reg_cou,
                      out = "tex/tab_tex/robust.tex",
                      title = "稳健性检验",
                      column.sep.width="0pt",
-                     dep.var.labels="官员信任水平",
+                     dep.var.caption="官员信任水平",
+                     dep.var.labels.include = FALSE,
                      covariate.labels =covar_label,
                      no.space=TRUE,
-                     omit.stat=c("LL","ser","f"),
+                     omit = "Constant",
+                     keep.stat = "n",
                      label = "regression_robust")
-
-
-
-# 异质分析
-
-
-
-
-
-
-
-# robust
-
-
-
-
-

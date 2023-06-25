@@ -167,7 +167,3 @@ reg_df_mech <- reg_df_fam%>%
   drop_na(job)
 lm(data = reg_df_mech,formula = ins_trust~job*clan)%>%
   summary()
-
-table(reg_df_mech$job)
-
-reg_df_mech$jobclass
